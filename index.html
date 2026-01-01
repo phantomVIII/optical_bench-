@@ -5,25 +5,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CBSE 3D Optical Bench Simulation</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; }
+        /* CSS Variables for easy theme switching */
+        :root {
+            --bg-color: #e8eaf6;
+            --ui-bg: rgba(255, 255, 255, 0.95);
+            --text-main: #333;
+            --text-sub: #555;
+            --stats-bg: #f0f0f0;
+            --border-color: #ddd;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --ui-bg: rgba(30, 30, 30, 0.95);
+            --text-main: #e0e0e0;
+            --text-sub: #bbb;
+            --stats-bg: #2d2d2d;
+            --border-color: #444;
+        }
+
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg-color); }
+        
         #ui { 
             position: absolute; top: 20px; left: 20px; 
-            background: rgba(255, 255, 255, 0.95); 
+            background: var(--ui-bg); 
             padding: 20px; border-radius: 12px; 
             width: 280px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
             z-index: 100;
+            transition: transform 0.3s ease, opacity 0.3s ease, background 0.3s ease;
+            color: var(--text-main);
         }
-        h2 { margin: 0 0 10px 0; font-size: 18px; color: #333; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
-        label { display: block; margin-top: 15px; font-size: 13px; color: #555; font-weight: bold; }
+
+        #ui.hidden { transform: translateX(-350px); opacity: 0; pointer-events: none; }
+
+        .btn-container { position: absolute; top: 20px; left: 20px; z-index: 101; display: flex; gap: 5px; }
+
+        button.control-btn {
+            padding: 2px 10px; background: #333; color: white;
+            border: none; border-radius: 6px; cursor: pointer; font-size: 12px;
+            transition: background 0.2s;
+        }
+        button.control-btn:hover { background: #555; }
+
+        h2 { margin: 0 0 10px 0; font-size: 18px; color: var(--text-main); border-bottom: 2px solid var(--border-color); padding-bottom: 5px; }
+        label { display: block; margin-top: 15px; font-size: 13px; color: var(--text-sub); font-weight: bold; }
         input[type="range"] { width: 100%; cursor: pointer; }
-        select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #ccc; background: white; }
-        .stats { background: #f0f0f0; padding: 10px; border-radius: 6px; margin-top: 15px; }
+        select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--ui-bg); color: var(--text-main); }
+        
+        .stats { background: var(--stats-bg); padding: 10px; border-radius: 6px; margin-top: 15px; }
         .stats p { margin: 5px 0; font-size: 14px; font-family: monospace; }
         .value-text { color: #d32f2f; font-weight: bold; }
-        .hint { font-size: 11px; color: #777; margin-top: 10px; font-style: italic; }
+        .hint { font-size: 11px; color: var(--text-sub); margin-top: 10px; font-style: italic; }
     </style>
 </head>
 <body>
+
+<div class="btn-container">
+    <button id="toggleUI" class="control-btn">Hide Menu</button>
+    <button id="toggleTheme" class="control-btn">🌙 Dark Mode</button>
+</div>
 
 <div id="ui">
     <h2>Optical Bench 3D</h2>
@@ -56,6 +96,28 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'controls';
 
+    // --- UI & THEME LOGIC ---
+    const ui = document.getElementById('ui');
+    const toggleBtn = document.getElementById('toggleUI');
+    const themeBtn = document.getElementById('toggleTheme');
+    let isDark = false;
+
+    toggleBtn.addEventListener('click', () => {
+        ui.classList.toggle('hidden');
+        toggleBtn.innerText = ui.classList.contains('hidden') ? 'Show Menu' : 'Hide Menu';
+    });
+
+    themeBtn.addEventListener('click', () => {
+        isDark = !isDark;
+        document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        themeBtn.innerText = isDark ? '☀️ Light Mode' : '🌙 Dark Mode';
+        
+        // Update Three.js Background
+        scene.background.set(isDark ? 0x121212 : 0xe8eaf6);
+        // Update Grid Helper Color
+        scale.material.color.set(isDark ? 0x444444 : 0x000000);
+    });
+
     // --- SCENE SETUP ---
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xe8eaf6);
@@ -69,26 +131,23 @@
     controls.enableDamping = true;
 
     // --- LIGHTING ---
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const pointLight = new THREE.PointLight(0xffffff, 1);
-    pointLight.position.set(50, 50, 50);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const pointLight = new THREE.PointLight(0xffffff, 1.2);
+    pointLight.position.set(50, 80, 50);
     scene.add(pointLight);
 
     // --- MODELS ---
-    // The Bench
     const bench = new THREE.Mesh(
         new THREE.BoxGeometry(12, 2, 300), 
         new THREE.MeshStandardMaterial({ color: 0x4e342e })
     );
     scene.add(bench);
 
-    // Scale Markings (Visual only)
     const scale = new THREE.GridHelper(300, 30, 0x000000, 0xbbbbbb);
     scale.rotation.z = Math.PI/2;
     scale.position.y = 1.1;
     scene.add(scale);
 
-    // The Lens
     const lensGroup = new THREE.Group();
     const lensBody = new THREE.Mesh(
         new THREE.CylinderGeometry(15, 15, 1.5, 32),
@@ -98,84 +157,53 @@
     lensGroup.add(lensBody);
     scene.add(lensGroup);
 
-    // Needle Generator
-    function createNeedle(color, label) {
+    function createNeedle(color) {
         const group = new THREE.Group();
         const stand = new THREE.Mesh(new THREE.BoxGeometry(4, 15, 2), new THREE.MeshStandardMaterial({color: 0x333333}));
         const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 12), new THREE.MeshStandardMaterial({color: 0x222222}));
         const tip = new THREE.Mesh(new THREE.ConeGeometry(0.4, 2, 8), new THREE.MeshStandardMaterial({color: color}));
-        
-        stand.position.y = 7.5;
-        pin.position.y = 18;
-        tip.position.y = 24;
-        
+        stand.position.y = 7.5; pin.position.y = 18; tip.position.y = 24;
         group.add(stand, pin, tip);
         return group;
     }
 
-    const objNeedle = createNeedle(0xd32f2f, "Object"); // Red
-    const imgNeedle = createNeedle(0x1976d2, "Image");  // Blue
+    const objNeedle = createNeedle(0xd32f2f);
+    const imgNeedle = createNeedle(0x1976d2);
     scene.add(objNeedle, imgNeedle);
 
-    // --- PHYSICS & UPDATES ---
     let rayLines = [];
-    const rayMatReal = new THREE.LineBasicMaterial({ color: 0xffa000, linewidth: 2 });
-    const rayMatVirtual = new THREE.LineDashedMaterial({ color: 0xffa000, dashSize: 2, gapSize: 1 });
+    const rayMatReal = new THREE.LineBasicMaterial({ color: 0xffa000 });
 
     function updatePhysics() {
         const u = parseFloat(document.getElementById('uSlider').value);
         let fInput = parseFloat(document.getElementById('fSlider').value);
         const type = document.getElementById('lensType').value;
-        
-        // Cartesian Convention: f is negative for Concave
         const f = (type === "concave") ? -fInput : fInput;
-        
-        // Lens Formula: 1/v = 1/f + 1/u  => v = (f*u)/(f+u)
         const v = (f * u) / (f + u);
         const m = v / u;
 
-        // Visual feedback for lens shape
         lensBody.scale.set(1, (type === "concave" ? 0.4 : 1.5), 1);
-
-        // Update UI Text
         document.getElementById('uVal').innerText = u;
         document.getElementById('fVal').innerText = Math.abs(f);
         document.getElementById('vDisplay').innerText = v.toFixed(2);
         document.getElementById('mDisplay').innerText = m.toFixed(2);
         
-        let nature = "";
-        if (type === "convex") {
-            nature = v > 0 ? "Real & Inverted" : "Virtual & Erect";
-        } else {
-            nature = "Virtual, Erect & Diminished";
-        }
+        let nature = (type === "convex") ? (v > 0 ? "Real & Inverted" : "Virtual & Erect") : "Virtual, Erect & Diminished";
         document.getElementById('natureDisplay').innerText = nature;
 
-        // Move Needles
-        objNeedle.position.z = -u; // Object is at -u distance
+        objNeedle.position.z = -u;
         imgNeedle.position.z = v;
-        
-        // Image needle visual adjustments
         imgNeedle.scale.y = Math.abs(m);
         imgNeedle.rotation.x = (m < 0) ? Math.PI : 0;
-        // Adjust y-pos so the base stays on the bench regardless of inversion
         imgNeedle.position.y = (m < 0) ? 24 * Math.abs(m) : 0; 
 
-        // Draw Rays
         scene.remove(...rayLines);
         rayLines = [];
-
         const tipPos = new THREE.Vector3(0, 24, -u);
-        const lensCenterPos = new THREE.Vector3(0, 0, 0);
         const imgTipPos = new THREE.Vector3(0, 24 * m, v);
-
-        // Ray 1: Parallel then through Focus
-        const r1_pts = [tipPos, new THREE.Vector3(0, 24, 0), imgTipPos, new THREE.Vector3(0, 24*m*2, v*2)];
-        createLine(r1_pts);
-
-        // Ray 2: Through Optical Center
-        const r2_pts = [tipPos, new THREE.Vector3(0, 0, 0), imgTipPos, new THREE.Vector3(0, -24*m, v*2)];
-        createLine(r2_pts);
+        
+        createLine([tipPos, new THREE.Vector3(0, 24, 0), imgTipPos]);
+        createLine([tipPos, new THREE.Vector3(0, 0, 0), imgTipPos]);
     }
 
     function createLine(points) {
@@ -185,7 +213,6 @@
         scene.add(line);
     }
 
-    // --- EVENT LISTENERS ---
     document.getElementById('uSlider').addEventListener('input', updatePhysics);
     document.getElementById('fSlider').addEventListener('input', updatePhysics);
     document.getElementById('lensType').addEventListener('change', updatePhysics);
@@ -195,7 +222,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // --- RENDER LOOP ---
     function animate() {
         requestAnimationFrame(animate);
         controls.update();
