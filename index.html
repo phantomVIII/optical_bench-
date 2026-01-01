@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBSE 3D Optical Bench Simulation</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; }
+        #ui { 
+            position: absolute; top: 20px; left: 20px; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 20px; border-radius: 12px; 
+            width: 280px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+        h2 { margin: 0 0 10px 0; font-size: 18px; color: #333; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+        label { display: block; margin-top: 15px; font-size: 13px; color: #555; font-weight: bold; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 4px; border: 1px solid #ccc; background: white; }
+        .stats { background: #f0f0f0; padding: 10px; border-radius: 6px; margin-top: 15px; }
+        .stats p { margin: 5px 0; font-size: 14px; font-family: monospace; }
+        .value-text { color: #d32f2f; font-weight: bold; }
+        .hint { font-size: 11px; color: #777; margin-top: 10px; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <h2>Optical Bench 3D</h2>
+    
+    <label>Lens Type:</label>
+    <select id="lensType">
+        <option value="convex">Convex (Converging)</option>
+        <option value="concave">Concave (Diverging)</option>
+    </select>
+
+    <label>Focal Length (f): <span id="fVal" class="value-text">20</span> cm</label>
+    <input type="range" id="fSlider" min="10" max="40" value="20">
+    
+    <label>Object Position (u): <span id="uVal" class="value-text">-40</span> cm</label>
+    <input type="range" id="uSlider" min="-100" max="-10" value="-40">
+    
+    <div class="stats">
+        <p>Image Dist (v): <span id="vDisplay" class="value-text">40.00</span> cm</p>
+        <p>Magnification: <span id="mDisplay" class="value-text">-1.00</span></p>
+        <p>Nature: <span id="natureDisplay" class="value-text">Real & Inverted</span></p>
+    </div>
+    <div class="hint">Right-click to pan • Left-click to rotate • Scroll to zoom</div>
+</div>
+
+<script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "controls": "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js" } }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'controls';
+
+    // --- SCENE SETUP ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xe8eaf6);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    camera.position.set(80, 50, 120);
+    controls.enableDamping = true;
+
+    // --- LIGHTING ---
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const pointLight = new THREE.PointLight(0xffffff, 1);
+    pointLight.position.set(50, 50, 50);
+    scene.add(pointLight);
+
+    // --- MODELS ---
+    // The Bench
+    const bench = new THREE.Mesh(
+        new THREE.BoxGeometry(12, 2, 300), 
+        new THREE.MeshStandardMaterial({ color: 0x4e342e })
+    );
+    scene.add(bench);
+
+    // Scale Markings (Visual only)
+    const scale = new THREE.GridHelper(300, 30, 0x000000, 0xbbbbbb);
+    scale.rotation.z = Math.PI/2;
+    scale.position.y = 1.1;
+    scene.add(scale);
+
+    // The Lens
+    const lensGroup = new THREE.Group();
+    const lensBody = new THREE.Mesh(
+        new THREE.CylinderGeometry(15, 15, 1.5, 32),
+        new THREE.MeshPhongMaterial({ color: 0x81d4fa, transparent: true, opacity: 0.6, shininess: 100 })
+    );
+    lensBody.rotation.x = Math.PI / 2;
+    lensGroup.add(lensBody);
+    scene.add(lensGroup);
+
+    // Needle Generator
+    function createNeedle(color, label) {
+        const group = new THREE.Group();
+        const stand = new THREE.Mesh(new THREE.BoxGeometry(4, 15, 2), new THREE.MeshStandardMaterial({color: 0x333333}));
+        const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 12), new THREE.MeshStandardMaterial({color: 0x222222}));
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.4, 2, 8), new THREE.MeshStandardMaterial({color: color}));
+        
+        stand.position.y = 7.5;
+        pin.position.y = 18;
+        tip.position.y = 24;
+        
+        group.add(stand, pin, tip);
+        return group;
+    }
+
+    const objNeedle = createNeedle(0xd32f2f, "Object"); // Red
+    const imgNeedle = createNeedle(0x1976d2, "Image");  // Blue
+    scene.add(objNeedle, imgNeedle);
+
+    // --- PHYSICS & UPDATES ---
+    let rayLines = [];
+    const rayMatReal = new THREE.LineBasicMaterial({ color: 0xffa000, linewidth: 2 });
+    const rayMatVirtual = new THREE.LineDashedMaterial({ color: 0xffa000, dashSize: 2, gapSize: 1 });
+
+    function updatePhysics() {
+        const u = parseFloat(document.getElementById('uSlider').value);
+        let fInput = parseFloat(document.getElementById('fSlider').value);
+        const type = document.getElementById('lensType').value;
+        
+        // Cartesian Convention: f is negative for Concave
+        const f = (type === "concave") ? -fInput : fInput;
+        
+        // Lens Formula: 1/v = 1/f + 1/u  => v = (f*u)/(f+u)
+        const v = (f * u) / (f + u);
+        const m = v / u;
+
+        // Visual feedback for lens shape
+        lensBody.scale.set(1, (type === "concave" ? 0.4 : 1.5), 1);
+
+        // Update UI Text
+        document.getElementById('uVal').innerText = u;
+        document.getElementById('fVal').innerText = Math.abs(f);
+        document.getElementById('vDisplay').innerText = v.toFixed(2);
+        document.getElementById('mDisplay').innerText = m.toFixed(2);
+        
+        let nature = "";
+        if (type === "convex") {
+            nature = v > 0 ? "Real & Inverted" : "Virtual & Erect";
+        } else {
+            nature = "Virtual, Erect & Diminished";
+        }
+        document.getElementById('natureDisplay').innerText = nature;
+
+        // Move Needles
+        objNeedle.position.z = -u; // Object is at -u distance
+        imgNeedle.position.z = v;
+        
+        // Image needle visual adjustments
+        imgNeedle.scale.y = Math.abs(m);
+        imgNeedle.rotation.x = (m < 0) ? Math.PI : 0;
+        // Adjust y-pos so the base stays on the bench regardless of inversion
+        imgNeedle.position.y = (m < 0) ? 24 * Math.abs(m) : 0; 
+
+        // Draw Rays
+        scene.remove(...rayLines);
+        rayLines = [];
+
+        const tipPos = new THREE.Vector3(0, 24, -u);
+        const lensCenterPos = new THREE.Vector3(0, 0, 0);
+        const imgTipPos = new THREE.Vector3(0, 24 * m, v);
+
+        // Ray 1: Parallel then through Focus
+        const r1_pts = [tipPos, new THREE.Vector3(0, 24, 0), imgTipPos, new THREE.Vector3(0, 24*m*2, v*2)];
+        createLine(r1_pts);
+
+        // Ray 2: Through Optical Center
+        const r2_pts = [tipPos, new THREE.Vector3(0, 0, 0), imgTipPos, new THREE.Vector3(0, -24*m, v*2)];
+        createLine(r2_pts);
+    }
+
+    function createLine(points) {
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geo, rayMatReal);
+        rayLines.push(line);
+        scene.add(line);
+    }
+
+    // --- EVENT LISTENERS ---
+    document.getElementById('uSlider').addEventListener('input', updatePhysics);
+    document.getElementById('fSlider').addEventListener('input', updatePhysics);
+    document.getElementById('lensType').addEventListener('change', updatePhysics);
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- RENDER LOOP ---
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    updatePhysics();
+    animate();
+</script>
+</body>
+</html>
